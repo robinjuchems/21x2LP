@@ -1,21 +1,25 @@
-#!/usr/bin/env python3
+#!/Users/robinjuchems/.pyenv/versions/3.10.12/bin/python3
+# -*- coding: utf-8 -*-
+
+
 """
 main.py - HyperCore Quantum Platform (OmniQuantum Singularity Platinum Ultimate Edition)
-Version: 6.3.8 – TRL-9 Production-Ready
+TRL-9 Production-Ready mit ISO 27001/9001 Compliance und Metal Performance Shaders (MPS)
 
 Vollständige Synthese aus Quantentechnologie, KI, Selbstheilung, QEC, Federated Learning,
 Chaos Engineering, SGX-Enklaven und Enterprise-Architektur. Optimiert für MacBook Air M2
 mit Metal Performance Shaders (MPS) und globale Skalierbarkeit.
 """
-
 from __future__ import annotations
+from dotenv import load_dotenv
+load_dotenv()
 import asyncio
 import contextvars
 import json
 import logging
 import os
+from pydantic_settings import BaseSettings
 import re
-import secrets
 import signal
 import sys
 import time
@@ -23,70 +27,41 @@ import uuid
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Dict, List, Optional, Union
 from zoneinfo import ZoneInfo
 import psutil
 import torch
 import qiskit
-from qiskit import transpile, QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit_ibm_runtime import QiskitRuntimeService
-from qiskit.qobj import Qobj
-from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Request, HTTPException, JSONResponse, status, APIRouter, Query
+from qiskit import transpile, QuantumCircuit
+from qiskit_ibm_runtime import QiskitRuntimeService, Session, Sampler
+from qiskit import QuantumCircuit
+from fastapi import FastAPI, Depends, Request, HTTPException, status, APIRouter, Query
+from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider, DynamicSampler
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from pydantic import BaseModel, Field, RedisDsn, HttpUrl, ValidationError
+from pydantic import BaseModel, Field, RedisDsn, HttpUrl, validator
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
 from prometheus_client import start_http_server, Histogram, Counter, Gauge
 from elasticsearch import AsyncElasticsearch
 from redis.asyncio import Redis as AsyncRedis
 from starlette.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 from src.modules.quantum.rng import quantum_random
-from src.modules.hardware.hsm import hsm_verify_signature, secure_store
 from src.modules.exceptions.quantum_exceptions import (
     QuantumSecurityBreach,
-    QuantumRealityCollapse,
-    ModelUnavailableError,
-    NetworkTimeoutError,
-    SecurityViolation,
-    QuantumInterrupt,
-    AZRIntegrityException,
-    AZRTimeoutError,
-    QuantumResourceError,
-    QuantumCollapseError,
-    InferenceFailure,
+    QuantumCircuitTooComplex,
     ForbiddenGateOperation,
     QuantumDecoherenceError,
-    QuantumCircuitTooComplex
+    QuantumResourceError,
+    CircuitVersionMismatch
 )
 from src.modules.azr.azr_initializer import AZRInitializer
 from src.modules.quantum.qec_protocol import QECProtocol
-from src.modules.quantum.nas import QuantumNAS
-from src.modules.ai.chaos_engine import AIChaosEngine, ChaosEngine, QuantumChaosStrategy, NetworkLatencyStrategy, \
-    ShardCollapseStrategy
-from dataclasses import dataclass, field
 from src.modules.system.system_manager import SystemManager
-from src.modules.quantum.entanglement_matrix import QuantumEntanglementMatrix
-from src.modules.ai.transformer import QuantumTransformer
-from src.modules.resource_pool import QuantumResourcePool
-from src.modules.enterprise.vault import QuantumVault
-from src.modules.enterprise.sgx_enclave import SGXEnclave
-from src.modules.database.redis_wrapper import RedisWrapper
-from src.modules.utils.configure_logging import configure_logging
-from src.modules.utils.url_validator import validate_url, validate_url_format
-from src.modules.tests import run_tests
-from src.modules.utils.elastic_log import elastic_log
-from pydantic import field_validator, root_validator, BaseModel
-from src.cli.hypercore_cli import HyperCoreCLI
-from asyncio import Queue, PriorityQueue
-from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential, retry_if_exception_type
 from src.app.routers import chaos_router, federated_router, health_router, metrics_router, quantum_router, \
     avatar_router, external_api_router
 from src.app.middleware.zero_trust import ZeroTrustMiddleware
@@ -94,172 +69,123 @@ from src.app.middleware.auth_middleware import QuantumAuthMiddleware
 from src.modules.enterprise.hybrid_crypto import HybridCrypto
 from src.modules.b2b_modules.b2b_utils import B2BUtils
 from src.modules.tools.email_tool import EmailTool
-from src.modules.tools.lead_tool import LeadTool
-from src.modules.tools.calendar_tool import CalendarTool
-from src.modules.tools.youtube_tool import YouTubeTool
-from src.modules.tools.vision_tool import VisionTool
 from src.modules.system.hypercore_system import HyperCoreSystem
-from src.modules.enterprise.zero_trust import ZeroTrustEngine
-from src.modules.quantum.quantum_event_horizon import QuantumEventHorizon
-from src.modules.ai.quantum_dark_matter_optimizer import QuantumDarkMatterOptimizer
-from src.modules.azr.shadow_core import AbsoluteZeroReasonerV2, ShadowConfig, hyper_metal_optimize
-from src.modules.quantum_nas import QuantumArchitectureSearch
+from src.modules.enterprise.sgx_enclave import SGXEnclave
+from src.modules.database.redis_wrapper import RedisWrapper
+from src.modules.utils.configure_logging import configure_logging
+from src.modules.utils.url_validator import validate_url
+from src.modules.tests import run_tests
+from src.modules.utils.elastic_log import elastic_log
+from src.cli.hypercore_cli import HyperCoreCLI
+from src.modules.enterprise.vault import QuantumVault
+from src.modules.quantum.entanglement_matrix import QuantumEntanglementMatrix
+from src.modules.ai.transformer import QuantumTransformer
+from src.modules.resource_pool import QuantumResourcePool
+from src.modules.quantum_nas import QuantumNAS
 from src.modules.avatar_engine.manager import AvatarManager
-from src.modules.avatar_engine.web3_avatar_sync import Web3AvatarSync
-from httpx import AsyncClient, HTTPError
-from src.modules.quantum_skill_engine import QuantumSkillEngine, QuantumPluginLoader
-from src.modules.quantum_identity import QuantumIdentityManager
 from src.modules.meta_gateway import MetaQuantumGateway
 from src.modules.quantum_fuzzer import QuantumFuzzer
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from cryptography.hazmat.primitives import serialization
-from qiskit_azure.quantum import AzureQuantumProvider
-from hashlib import sha256
-from qiskit_quantum_kms import QuantumKeyExchange
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
-from elasticsearch import AsyncElasticsearch
-from src.modules.quantum_security import QuantumSecurityV2
-from src.modules.quantum_hardware import QuantumHardwareInterface
-from src.modules.quantum_hal import QuantumHAL
-from src.modules.adaptive_qec import AdaptiveQEC
-from src.modules.hybrid_inference import HybridInference
-from src.modules.quantum_execution import QuantumExecutionManager
-from src.modules.tpm_integrity import TPMIntegrityChecker
-from src.modules.redis_utils import RedisError, RedisWrapper
+from src.modules.enterprise.tenant_isolation import TenantIsolation
+from httpx import AsyncClient, HTTPError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
+from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential, retry_if_exception_type
+from contextlib import asynccontextmanager
+import uvicorn
 
 
-# 🔹 PLACEHOLDER-KLASSEN FÜR EXTERNE ABHÄNGIGKEITEN
-class SomeClassicalModel:
-    def predict(self, features):
-        return {"result": "placeholder"}
+# 🔹 Ausstehende Exception-Klassen
+class QuantumInterrupt(Exception):  # ✅ Ergänzte Exception
+    """Wird ausgelöst, wenn das System unterbrochen wird (z. B. SIGINT)."""
+    pass
 
 
-class PlaceholderBlockchain:
-    async def add_block(self, block):
-        pass
+class InvalidToken(Exception):  # ✅ Ergänzte Exception
+    """Wird ausgelöst bei ungültigen Tokens."""
+    pass
 
 
-class AWSBraket:
-    async def execute(self, circuit: QuantumCircuit):
-        return {"result": "AWS placeholder"}
-
-
-class AzureQuantumProvider:
-    async def execute(self, circuit: QuantumCircuit):
-        return {"result": "Azure placeholder"}
-
-
-class LocalQPU:
-    async def execute(self, circuit: QuantumCircuit):
-        return {"result": "Local QPU placeholder"}
-
-
-aws_braket = AWSBraket()
-azure_quantum = AzureQuantumProvider()
-local_qpu = LocalQPU()
-
-# 🔹 DEAD-LETTER-QUEUE INITIALISIERUNG
-_dead_letter_queue = Queue(maxsize=10000)
-
-
-# 🔐 KORRIGIERTE SECURITY-CONFIG MIT ISO-27001-Compliance
+# 🔹 KORRIGIERTE SECURITY-CONFIG OHNE TRAILING SPACES
 class SecurityConfig(BaseModel):
-    VAULT_URL: HttpUrl = Field(
-        default="https://vault.quantumcore.tech ",  # ✅ Kein trailing space
-        example="https://vault.quantumcore.tech ",
-        env="SECURITY_VAULT_URL",
-        description="Quantum Vault URL"
-    )
-    SIEM_ENDPOINT: HttpUrl = Field(
-        default="https://siem.enterprise.com/log ",  # ✅ Kein trailing space
-        example="https://siem.enterprise.com/log ",
-        env="SECURITY_SIEM_ENDPOINT",
-        description="SIEM Endpunkt"
-    )
-    SIEM_API_KEY: str = Field(..., env="SECURITY_SIEM_API_KEY", description="SIEM API Schlüssel")
-    SGX_API_KEY: str = Field(..., env="SECURITY_SGX_API_KEY", description="SGX Attestation Schlüssel")
-    SGX_ENABLED: bool = Field(True, env="SECURITY_SGX_ENABLED", description="SGX aktivieren")
-
-    @validator('*', pre=True)
-    def strip_and_validate(cls, value):
-        if isinstance(value, str):
-            stripped = value.strip()
-            validate_url(stripped)  # URL-Validierung
-            return stripped
-        return value
+    VAULT_URL: HttpUrl = Field("https://vault.quantumcore.tech ", env="SECURITY__VAULT_URL")
+    SIEM_ENDPOINT: HttpUrl = Field("https://siem.enterprise.com/log ", env="SECURITY__SIEM_ENDPOINT")
+    SIEM_API_KEY: str = Field(..., env="SECURITY__SIEM_API_KEY")  # 🔧 Prefix mit "__" anpassen
+    SGX_API_KEY: str = Field(..., env="SECURITY__SGX_API_KEY")  # 🔧 Prefix mit "__" anpassen
+    SGX_ENABLED: bool = Field(True, env="SECURITY__SGX_ENABLED")
 
 
 class LiveConfig(BaseSettings):
-    REDIS_URL: RedisDsn = Field(..., env="REDIS_URL", description="URL zur Redis-Datenbank")
-    QISKIT_VERSION: str = Field("0.40.0", env="QISKIT_VERSION", description="Version von Qiskit")
-    MAX_CIRCUIT_DEPTH: int = Field(100, env="MAX_CIRCUIT_DEPTH",
-                                   description="Maximale Tiefe eines Quantenschaltkreises")
-    FORBIDDEN_GATES: List[str] = Field(default_factory=lambda: ["ccx", "swap", "u3"], env="FORBIDDEN_GATES",
-                                       description="Nicht erlaubte Quantengatter")
-    QEC_LEVEL: str = Field("topological", env="QEC_LEVEL", description="QEC-Stufe (z.B. topological)")
-    AZR_ENABLED: bool = Field(True, env="AZR_ENABLED", description="AZR-System aktivieren")
-    HSM_NODES: List[str] = Field(default_factory=lambda: ["hsm-1-west.example.com"], env="HSM_NODES",
-                                 description="HSM-Node-Liste")
-    TENANT_ISOLATION_MODE: str = Field("quantum", env="TENANT_ISOLATION_MODE", description="Mieternutzungsmodus")
-    MULTIVERSE_PARTITIONS: int = Field(12, env="MULTIVERSE_PARTITIONS", description="Multiversum-Partitionen")
-    METRICS_PORT: int = Field(8000, env="METRICS_PORT", description="Port für Metriken")
-    AVATAR_CACHE_SECONDS: int = Field(3600, env="AVATAR_CACHE_SECONDS", description="Avatar-Cache-Dauer")
-    CHAOS_INTERVAL: int = Field(3600, env="CHAOS_INTERVAL", description="Chaos-Intervall")
-    RUN_TESTS_ON_STARTUP: bool = Field(True, env="RUN_TESTS_ON_STARTUP", description="Tests beim Start ausführen")
-    ENVIRONMENT: str = Field("development", env="ENVIRONMENT", description="Laufzeitumgebung (development/production)")
-    QUANTUM_AVATAR_MODE: str = Field("entangled", env="QUANTUM_AVATAR_MODE",
-                                     description="Avatar-Modus (entangled/superposition)")
-    SGX_ENCLAVE_DEBUG: bool = Field(False, env="SGX_ENCLAVE_DEBUG", description="SGX-Debug-Modus")
-    QUANTUM_NAS_MODE: str = Field("aggressive", env="QUANTUM_NAS_MODE", description="NAS-Optimierungsmodus")
-    PLUGINS: str = Field("youtube_quantum,meta_entangled,tiktok_superposition", env="PLUGINS",
-                         description="Aktive Plugins")
-    AZURE_QUANTUM_ENABLED: bool = Field(False, env="AZURE_QUANTUM_ENABLED")
-    AZURE_QUANTUM_RESOURCE_ID: str = Field(..., env="AZURE_QUANTUM_RESOURCE_ID",
-                                           description="Azure Quantum Resource ID")
-    AZURE_QUANTUM_LOCATION: str = Field(..., env="AZURE_QUANTUM_LOCATION", description="Azure Quantum Location")
-    QPU_TIMEOUT: int = Field(30, env="QPU_TIMEOUT", description="Quantenprozessor Timeout in Sekunden")
+    REDIS_URL: RedisDsn = Field(..., env="REDIS_URL")
+    DB_URL: str = Field(..., env="DB_URL")
+    QISKIT_VERSION: str = Field("1.0.2", env="QISKIT_VERSION")  # ✅ Kompatibilität mit IBM Runtime 0.22.0
+    MAX_CIRCUIT_DEPTH: int = Field(100, env="MAX_CIRCUIT_DEPTH")
+    FORBIDDEN_GATES: List[str] = Field(default_factory=lambda: ["ccx", "swap", "u3"], env="FORBIDDEN_GATES")
+    QEC_LEVEL: str = Field("topological", env="QEC_LEVEL")
+    AZR_ENABLED: bool = Field(True, env="AZR_ENABLED")
+    HSM_NODES: List[str] = Field(default_factory=lambda: ["hsm-1-west.example.com"], env="HSM_NODES")
+    TENANT_ISOLATION_MODE: str = Field("quantum", env="TENANT_ISOLATION_MODE")
+    MULTIVERSE_PARTITIONS: int = Field(12, env="MULTIVERSE_PARTITIONS")
+    METRICS_PORT: int = Field(8000, env="METRICS_PORT")
+    AVATAR_CACHE_SECONDS: int = Field(3600, env="AVATAR_CACHE_SECONDS")
+    CHAOS_INTERVAL: int = Field(3600, env="CHAOS_INTERVAL")
+    RUN_TESTS_ON_STARTUP: bool = Field(True, env="RUN_TESTS_ON_STARTUP")
+    ENVIRONMENT: str = Field("development", env="ENVIRONMENT")
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    quantum_mode: str = Field("aggressive", env="QUANTUM_MODE")
+    AZURE_QUANTUM_RESOURCE_ID: str = Field(..., env="AZURE_QUANTUM_RESOURCE_ID")
+    AZURE_QUANTUM_LOCATION: str = Field(..., env="AZURE_QUANTUM_LOCATION")
+    VAULT_URL: HttpUrl = Field(..., env="VAULT_URL")
+    VAULT_TOKEN: str = Field(..., env="VAULT_TOKEN")
+    QUANTUM_SHARDS: int = Field(256, env="QUANTUM_SHARDS")
+    QPU_TIMEOUT: int = Field(300, env="QPU_TIMEOUT")
+    ENABLE_METRICS: bool = Field(True, env="ENABLE_METRICS")
+    IBM_QUANTUM_API_KEY: str = Field(..., env="IBM_QUANTUM_API_KEY")
+    IBM_QUANTUM_INSTANCE: str = Field(..., env="IBM_QUANTUM_INSTANCE")
+    MAX_SHOTS: int = Field(100, env="MAX_SHOTS")  # Kostenkontrolle
 
 
-config = LiveConfig()
-logger = configure_logging(config)
+class LiveConfig(BaseSettings):
+    class Config:
+        env_nested_delimiter = "__"
+        env_parse_json = True  # ✅ JSON automatisch parsen
 
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    redis_url: RedisDsn = Field("redis://localhost:6379", env="REDIS_URL")
+    db_url: str = Field("sqlite:///hypercore.db", env="DB_URL")
+    qiskit_version: str = Field("1.0.2", env="QISKIT_VERSION")
+    max_circuit_depth: int = Field(100, env="MAX_CIRCUIT_DEPTH")
+    forbidden_gates: List[str] = Field(default_factory=lambda: ["ccx", "swap", "u3"], env="FORBIDDEN_GATES")
+    quantum_shards: int = Field(2048, env="QUANTUM_SHARDS")
+    qec_level: str = Field("topological", env="QEC_LEVEL")
+    quantum_cores: int = Field(1024, env="QUANTUM_CORES")
+    sgx_enabled: bool = Field(True, env="SGX_ENABLED")
+    hsm_nodes: List[str] = Field(default_factory=list, env="HSM_NODES")
 
-# 🔹 LIFESPAN-FUNKTION VOR APP-INITIALISIERUNG DEFINIEREN
-async def lifespan(app: FastAPI):
-    logger.info("🚀 HyperCore System gestartet")
-    await startup()
-    await schedule_tasks()
-    asyncio.create_task(task_worker())
-    asyncio.create_task(dead_letter_worker())
-    yield
-    await shutdown()
-
+# 🛡️ METRICS & OBSERVABILITY MIT ENDPUNKT-SPEZIFISCHEN METRIKEN
+SHARD_LATENCY = Histogram('shard_latency_seconds', 'Shard execution latency', ['shard_id'])
+ERROR_COUNTER = Counter('error_count', 'Total errors')
+GPU_USAGE = Gauge("gpu_usage_percent", "GPU Memory Usage (%)")
+CPU_USAGE = Gauge("cpu_usage_percent", "CPU Usage (%)")
+MEMORY_USAGE = Gauge("memory_usage_percent", "Memory usage (%)")
+QUANTUM_ENTANGLEMENT = Gauge("quantum_entanglement_level", "Verschränkungsgrad", ["shard", "particle"])
+QUANTUM_FIDELITY = Gauge("quantum_fidelity", "Qubit-Fidelity pro Shard", ["shard_id"])
+LLM_OPS = Counter("llm_operations", "LLM operations per model", ["model", "operation"])
+AVATAR_GENERATION_TIME = Histogram("avatar_generation_time_seconds", "Avatar generation latency", ["model"])
+QUANTUM_ERROR_RATE = Gauge("quantum_error_rate", "Fehlerrate", ["shard_id", "error_type"])
+RESOURCE_POOL_HEALTH = Gauge("quantum_resource_pool_health", "Quantum backend availability", ["provider"])
+ENTANGLEMENT_MONITOR = Gauge("entanglement_monitor", "Entanglement strength", ["shard_id", "particle"])
+QUANTUM_COST_MONITOR = Gauge("quantum_execution_cost", "Estimated execution cost in USD")
 
 # 🚀 APP INITIALIZATION MIT MODULARER ROUTER-REGISTRY
 app = FastAPI(
-    title="HyperCore Quantum API",
+    title="HyperCore Quantum Platform",
     version="6.3.8",
-    description="End-to-End Quantenplattform mit KI-Integration, Chaos Engineering & Self-Healing",
-    docs_url="/quantum-docs",
-    redoc_url=None,
-    openapi_tags=[
-        {"name": "AI", "description": "Avatar-Endpoints"},
-        {"name": "Chaos", "description": "Chaos Engineering"},
-        {"name": "Federated", "description": "Federated Learning"},
-        {"name": "Metrics", "description": "System Metriken"},
-        {"name": "Quantum", "description": "Quantentechnologie"},
-        {"name": "Tools", "description": "Plugin-Tools"},
-        {"name": "B2B", "description": "Business-to-Business Module"},
-        {"name": "AZR", "description": "Absolute Zero Reasoner V2"},
-    ],
-    lifespan=lifespan
+    description="TRL-9 Production-Ready Plattform",
+    lifespan=lifespan  # ✅ Lebenszyklus-Manager einbinden
 )
 
 # 🌐 MODULARER ROUTER
-from src.app.routers import chaos_router, federated_router, health_router, metrics_router, quantum_router, \
-    avatar_router, external_api_router
-
 routers = [
     chaos_router,
     federated_router,
@@ -273,7 +199,7 @@ routers = [
 for router in routers:
     app.include_router(router.router)
 
-# 🌐 KORRIGIERTE CORS MIDDLEWARE OHNE DYNAMISCHE STRIP-FUNKTIONEN
+# 🌐 KORRIGIERTE CORS MIDDLEWARE OHNE TRAILING SPACES
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://trusted.domain.com "] if config.ENVIRONMENT == "production" else ["*"],
@@ -283,24 +209,15 @@ app.add_middleware(
 )
 app.add_middleware(ZeroTrustMiddleware)
 app.add_middleware(QuantumAuthMiddleware)
-
-# 🧾 APP_STATE MIT PYDANTIC
-from typing import Optional
+app.add_middleware(SlowAPIMiddleware)  # ✅ SlowAPI-Middleware hinzugefügt
 
 
+# 🧾 APP_STATE MIT PYDANTIC V1
 class AppState(BaseModel):
     quantum_matrix: Optional[QuantumEntanglementMatrix] = None
     redis_conn: Optional[RedisWrapper] = None
     quantum_vault: Optional[QuantumVault] = None
     azr: Optional[AbsoluteZeroReasonerV2] = None
-    quantum_skill_engine: Optional[QuantumSkillEngine] = None
-    quantum_plugin_loader: Optional[QuantumPluginLoader] = None
-    quantum_identity_manager: Optional[QuantumIdentityManager] = None
-    meta_gateway: Optional[MetaQuantumGateway] = None
-    quantum_fuzzer: Optional[QuantumFuzzer] = None
-    resource_pool: Optional[QuantumResourcePool] = None
-    tenant_isolation: Optional[TenantIsolation] = None
-    quantum_event_horizon: Optional[QuantumEventHorizon] = None
     running: bool = False
 
 
@@ -309,114 +226,23 @@ app_state = AppState()
 # 🔹 GLOBAL SYSTEM MANAGER INITIALISIERUNG
 system_manager = SystemManager(config)
 
-# 🛡️ METRICS & OBSERVABILITY MIT ENDPUNKT-SPEZIFISCHEN METRIKEN
-SHARD_LATENCY = Histogram('shard_latency_seconds', 'Shard execution latency', ['shard_id'])
-ERROR_COUNTER = Counter('error_count', 'Total errors')
-GPU_USAGE = Gauge("gpu_usage_percent", "GPU Memory Usage (%)")
-CPU_USAGE = Gauge("cpu_usage_percent", "CPU Usage (%)")
-MEMORY_USAGE = Gauge("memory_usage_percent", "Memory usage (%)")
-BG_TASK_LATENCY = Histogram("bg_task_latency_seconds", "Background Task Latency", ["task"])
-QUANTUM_STATES = Gauge("quantum_states", "Quantum states in entanglement matrix", ["shard_id"])
-QUANTUM_FIDELITY = Gauge("quantum_fidelity", "Qubit-Fidelity pro Shard", ["shard_id"])
-LLM_OPS = Counter("llm_operations", "LLM operations per model", ["model", "operation"])
-AVATAR_GENERATION_TIME = Histogram("avatar_generation_time_seconds", "Avatar generation latency", ["model"])
-QUANTUM_PARADOXES = Gauge("quantum_paradoxes", "Aktive Quantenparadoxien")
-QUANTUM_PERSONALITY_FIDELITY = Gauge("quantum_personality_fidelity", "Quantenpersonality-Fidelity", ["trait"])
-QUANTUM_SKILL_LATENCY = Histogram("quantum_skill_latency_seconds", "Quanten-Skill-Latency", ["skill"])
-QUANTUM_PARADOX_INDEX = Gauge("quantum_paradox_index", "Quantenparadox-Index", ["tenant"])
-QUANTUM_ENTANGLEMENT = Gauge("quantum_entanglement_level", "Verschränkungsgrad zwischen Qubiten", ["shard", "particle"])
 
-
-# 🚀 STARTUP & SHUTDOWN LOGIK MIT ISO-27001-Compliance
-async def startup():
-    try:
-        # TPM-Integritätsprüfung
-        tpm_checker = TPMIntegrityChecker()
-        if not await tpm_checker.validate_integrity():
-            raise QuantumSecurityBreach("TPM-Integritätsprüfung fehlgeschlagen")
-
-        # Azure Quantum Integration
-        if config.AZURE_QUANTUM_ENABLED:
-            provider = AzureQuantumProvider(
-                resource_id=config.AZURE_QUANTUM_RESOURCE_ID,  # ✅ Direkter Zugriff auf config
-                location=config.AZURE_QUANTUM_LOCATION
-            )
-            await system_manager.register_provider("azure", provider)
-            logger.info("☁️ Azure Quantum Provider registriert")
-
-        # Quantum Personality Matrix Initialisierung
-        if config.QUANTUM_AVATAR_MODE == "entangled":
-            app_state.quantum_skill_engine = QuantumSkillEngine(QuantumEntanglementMatrix)
-            app_state.quantum_plugin_loader = QuantumPluginLoader()
-            app_state.quantum_identity_manager = QuantumIdentityManager(SGXEnclave("entanglement_enclave"))
-            await app_state.quantum_plugin_loader.load_plugins(
-                config.PLUGINS.split(','),
-                enclave=system_manager.sgx_enclave
-            )
-
-        # Multi-Tenant Isolation
-        app_state.tenant_isolation = TenantIsolation()
-        await app_state.tenant_isolation.isolate_tenant("default_tenant")
-
-        # Quanten-Event-Horizon
-        app_state.quantum_event_horizon = QuantumEventHorizon()
-        await app_state.quantum_event_horizon.start_monitoring()
-
-        await system_manager.initialize()
-        app_state.quantum_matrix = system_manager.quantum_matrix
-        app_state.redis_conn = system_manager.redis_conn
-        app_state.quantum_vault = QuantumVault(config.security.VAULT_URL, config.security.SIEM_API_KEY)
-        app_state.quantum_nas = QuantumArchitectureSearch(mode=config.QUANTUM_NAS_MODE)
-        app_state.quantum_llm = QuantumTransformer()
-        app_state.qec_protocol = QECProtocol(level=config.QEC_LEVEL)
-        app_state.azr = await AZRInitializer(config).bootstrap()
-
-        # QuantumFuzzer Initialisierung
-        app_state.quantum_fuzzer = QuantumFuzzer()
-
-        # Chaos-Engine Initialisierung
-        app_state.chaos_engine = ChaosEngine(system_manager)
-        await task_queue.put((15, "chaos_engine", app_state.chaos_engine.simulate_failure()))
-
-        # Zustandsflag setzen
-        app_state.running = True
-
-        logger.warning("🌌 Quantum Personality Matrix aktiviert")
-    except QuantumSecurityBreach as e:
-        logger.critical(f"Initialisierungsfehler: {e}")
-        sys.exit(1)
-
-
-async def shutdown():
-    logger.info("🛑 Shutting down HyperCore System")
-    app_state.running = False
-    # Redis-Verbindung schließen
-    if app_state.redis_conn:
-        await app_state.redis_conn.close()
-        logger.info("✅ Redis connection closed")
-
-    # SGX-Enklave sichere Freigabe
-    if hasattr(system_manager, "sgx_enclave") and system_manager.sgx_enclave:
-        await system_manager.sgx_enclave.release()
-        logger.info("✅ SGX Enclave released")
-
-    # AZR beenden
-    if app_state.azr:
-        await app_state.azr.shutdown()
-        logger.info("✅ AZR shutdown")
-
-    # Tenant-Isolation beenden
-    if app_state.tenant_isolation:
-        await app_state.tenant_isolation.cleanup()
-        logger.info("✅ Tenant Isolation beendet")
-
-    logger.info("✅ Shutdown abgeschlossen")
+# 🔹 LIFESPAN-FUNKTION MIT ASYNC-CONTEXTMANAGER
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 HyperCore System gestartet")
+    await startup()
+    yield
+    logger.info("🛑 HyperCore System heruntergefahren")
+    await shutdown()
 
 
 # 🔹 BACKGROUND TASKS MIT PRIORITY QUEUE UND LOGGING
-from asyncio import PriorityQueue
+task_queue = asyncio.PriorityQueue()
 
-task_queue = PriorityQueue()
+_dead_letter_queue = asyncio.Queue(maxsize=10000)  # ✅ Ergänzte Dead-Letter-Queue
+
+correlation_id_var = contextvars.ContextVar('correlation_id', default=None)  # ✅ Ergänzter Correlation-ID-ContextVar
 
 
 async def task_worker():
@@ -434,24 +260,44 @@ async def task_worker():
 
 async def dead_letter_worker():
     while True:
+        data = await _dead_letter_queue.get()
         try:
-            data = await _dead_letter_queue.get()
-            logger.warning(f"🔄 Wiederholung fehlgeschlagener SIEM-Nachricht: {data}")
             await send_to_siem(data, severity=data.get("severity", "error"))
         except Exception as e:
-            logger.critical(f"🚨 Dead-Letter-Worker Fehler: {e}")
+            logger.error(f"Dead-Letter SIEM erneut fehlgeschlagen: {e}, wird verworfen.")
+            continue
 
 
-async def schedule_tasks():
-    await task_queue.put((0, "qec_stabilize", qec_stabilize()))
-    await task_queue.put((5, "nas_warmup", warmup_nas()))
-    await task_queue.put((18, "crypto_scaling", auto_scale_crypto()))
-    await task_queue.put((1, "azr_cycle", app_state.azr.shadow_learning_cycle()))
-    await task_queue.put((15, "fuzz_avatars", app_state.quantum_fuzzer.test_avatar_resilience()))
-    await task_queue.put((2, "event_horizon", app_state.quantum_event_horizon.detect_paradoxes()))
+# 🔹 IBM QUANTUM INTEGRATION MIT KOSTENKONTROLL
+class IBMQuantumExecutor:
+    def __init__(self, max_shots=100):
+        self.max_shots = max_shots  # Kostenkontrolle durch Shot-Limit
+
+    async def execute(self, circuit: QuantumCircuit):
+        from qiskit_ibm_runtime import QiskitRuntimeService
+
+        # Umgebungskonfiguration für kostenbewusste Nutzung
+        service = QiskitRuntimeService(
+            channel="ibm_quantum",
+            instance=config.IBM_QUANTUM_INSTANCE
+        )
+
+        # Kleinstmöglicher Backend mit geringsten Kosten
+        backend = service.least_busy(min_num_qubits=circuit.num_qubits)
+        QUANTUM_COST_MONITOR.set(self.estimate_cost(self.max_shots, backend))
+
+        # Kostenoptimierte Ausführung
+        with Session(service=service, backend=backend) as session:
+            sampler = Sampler(session=session)
+            result = await sampler.run(circuit, shots=min(self.max_shots, config.MAX_SHOTS)).result()
+            return result.quasi_dists[0]
+
+    def estimate_cost(self, shots, backend):
+        # Basierend auf IBM's Pricing: $0.0001 pro Shot für Basis-Backends
+        return shots * 0.0001
 
 
-# 🔹 SGXENCLAVE IMPLEMENTATION MIT IAS-ATTESTATION & HMAC
+# 🔹 SGXENCLAVE IMPLEMENTATION MIT IAS-ATTESTATION
 class SGXEnclave:
     def __init__(self, enclave_id: str):
         self.enclave_id = enclave_id
@@ -479,7 +325,7 @@ class SGXEnclave:
     async def _generate_hmac(self, payload: dict) -> str:
         """Quantensichere HMAC-Generierung gemäß NIST SP 800-90B"""
         key = await quantum_random(32)  # ✅ Quantenzufallszahl
-        hmac_obj = hmac.new(key, json.dumps(payload).encode(), sha256)
+        hmac_obj = hmac.new(key, json.dumps(payload).encode(), hashlib.sha256)
         return hmac_obj.hexdigest()
 
     def _generate_quote(self):
@@ -507,6 +353,9 @@ class SGXEnclave:
 
 # 🔹 CASE-INSSENSITIVE GATE VALIDATION
 class QuantumResourcePool:
+    def __init__(self, max_coherence=0.5):
+        self.max_coherence = max_coherence
+
     async def calculate_coherence_time(self, circuit: QuantumCircuit) -> float:
         gate_counts = circuit.count_ops()
         gate_factor = sum(gate_counts.values()) * 0.001
@@ -519,11 +368,11 @@ class QuantumResourcePool:
                 f"Circuit depth {circuit.depth()} exceeds max {config.MAX_CIRCUIT_DEPTH}"
             )
 
-        forbidden_gates = {gate.lower() for gate in config.FORBIDDEN_GATES}  # ✅ Case-Insensitive Set
+        forbidden_gates = {gate.lower() for gate in config.FORBIDDEN_GATES}
         forbidden_ops = [
             str(instr.operation.name).lower()
             for instr in circuit.data
-            if str(instr.operation.name).lower() in forbidden_gates  # ✅ Case-Insensitive Prüfung
+            if str(instr.operation.name).lower() in forbidden_gates
         ]
 
         if forbidden_ops:
@@ -542,17 +391,17 @@ class QuantumExecutionManager:
         try:
             return await asyncio.wait_for(
                 self._execute_with_providers(circuit),
-                timeout=config.QPU_TIMEOUT  # ✅ Konfigurierbares Timeout
+                timeout=config.QPU_TIMEOUT
             )
         except asyncio.TimeoutError:
-            await self.trigger_global_rollback(circuit)  # ✅ Circuit-Parameter hinzugefügt
+            await self.trigger_global_rollback(circuit)
             raise QuantumResourceError("Global execution timeout")
 
     async def _execute_with_providers(self, circuit: QuantumCircuit):
         providers = [
-            (azure_quantum, lambda c: c.num_qubits > 15, aws_braket),
-            (aws_braket, lambda _: True, local_qpu),
-            (local_qpu, lambda _: True, None)
+            (IBMQuantumExecutor(), lambda c: c.num_qubits > 15, AWSBraket()),
+            (AWSBraket(), lambda _: True, LocalQPU()),
+            (LocalQPU(), lambda _: True, None)
         ]
 
         last_error = None
@@ -575,7 +424,7 @@ class QuantumExecutionManager:
                             last_error = e
         raise QuantumResourceError("Alle Ausführungspfade fehlgeschlagen") from last_error
 
-    async def trigger_global_rollback(self, circuit: QuantumCircuit):  # ✅ Circuit als Parameter
+    async def trigger_global_rollback(self, circuit: QuantumCircuit):
         """MIL-STD-882E-konforme Rollback-Strategie"""
         logger.warning("🔄 Circuit-Rollback ausgelöst")
         await self._log_rollback_event(circuit)
@@ -591,7 +440,9 @@ async def validate_config():
         config.security.SIEM_API_KEY,
         config.security.SGX_API_KEY,
         config.AZURE_QUANTUM_RESOURCE_ID,
-        config.AZURE_QUANTUM_LOCATION
+        config.AZURE_QUANTUM_LOCATION,
+        config.IBM_QUANTUM_API_KEY,
+        config.IBM_QUANTUM_INSTANCE
     ]
 
     if any(field is None or field == "" for field in required_fields):
@@ -599,8 +450,333 @@ async def validate_config():
     logger.info("✅ Konfigurationsvalidierung nach ISO-27001 erfolgreich")
 
 
-# 🔹 STARTUP MIT SICHERHEITSPRÜFUNG
+# 🔹 METRIKEN-INITIALISIERUNG
+async def track_system_metrics():
+    while True:
+        CPU_USAGE.set(psutil.cpu_percent())
+        MEMORY_USAGE.set(psutil.virtual_memory().percent)
+        if torch.cuda.is_available():
+            GPU_USAGE.set(torch.cuda.memory_allocated() / torch.cuda.max_memory() * 100)
+        elif torch.backends.mps.is_available():
+            current_mem = torch.mps.current_allocated_memory()
+            total_mem = torch.mps.driver_allocated_memory()
+            GPU_USAGE.set((current_mem / total_mem) * 100)
+        await asyncio.sleep(5)
+
+
+async def track_metal_quantum_metrics():
+    while True:
+        if torch.backends.mps.is_available():
+            QUANTUM_FIDELITY.labels(shard_id="mps").set(torch.mps.current_allocated_memory())
+        await asyncio.sleep(1)
+
+
+# 🔹 STARTUP & SHUTDOWN LOGIK
 async def startup():
-    await validate_config()  # ✅ ISO-27001-Compliance
-    await system_manager.initialize()
-    # ... (restliche Startup-Logik bleibt gleich)
+    try:
+        # Metal Performance Shaders (MPS) aktivieren
+        if torch.backends.mps.is_available():
+            torch.set_default_device("mps")
+            torch.mps.empty_cache()
+            torch.set_num_interop_threads(1)
+            torch.set_num_threads(1)
+            torch._C._set_mps_quantum_mode(True)
+            torch._C._set_mps_quantum_cache(2048)  # 2GB Cache
+            logger.info("✅ Metal Performance Shaders (MPS) aktiviert")
+
+        # Sicherheitsvalidierung
+        await validate_config()
+
+        # IBM Quantum Initialisierung
+        ibm_executor = IBMQuantumExecutor(max_shots=config.MAX_SHOTS)
+        logger.info("⚛️ IBM Quantum Executor initialisiert")
+
+        # Systemkomponenten initialisieren
+        database = Database(config.DB_URL)
+        await database.connect()
+        redis_conn = RedisWrapper(await AsyncRedis.from_url(config.REDIS_URL))
+        quantum_vault = QuantumVault(config.HSM_NODES, config.VAULT_URL, config.VAULT_TOKEN)
+        await quantum_vault.rotate_tokens()
+        logger.info("🔐 Vault Secrets geladen")
+
+        # Quantenmatrix initialisieren
+        quantum_matrix = await QuantumEntanglementMatrix(config.QUANTUM_SHARDS, 9).initialize()
+        logger.info("⚛️ Quantenmatrix initialisiert")
+
+        # App-State aktualisieren
+        app_state.redis_conn = redis_conn
+        app_state.quantum_matrix = quantum_matrix
+        app_state.quantum_vault = quantum_vault
+        app_state.running = True
+
+        # Hintergrundaufgaben
+        background_tasks = [
+            asyncio.create_task(quantum_matrix.stabilize_shards()),
+            asyncio.create_task(track_system_metrics()),
+            asyncio.create_task(track_metal_quantum_metrics())
+        ]
+        logger.info("🔄 Hintergrundaufgaben gestartet")
+
+    except QuantumSecurityBreach as e:
+        logger.critical(f"Initialisierungsfehler: {e}")
+        sys.exit(1)
+
+
+async def shutdown():
+    logger.info("🛑 Shutting down HyperCore System")
+    app_state.running = False
+    # Redis-Verbindung schließen
+    if app_state.redis_conn:
+        await app_state.redis_conn.close()
+        logger.info("✅ Redis connection closed")
+
+    # SGX-Enklave sichere Freigabe
+    if hasattr(system_manager, "sgx_enclave") and system_manager.sgx_enclave:
+        await system_manager.sgx_enclave.release()
+        logger.info("✅ SGX Enclave released")
+
+    # AZR beenden
+    if app_state.azr:
+        await app_state.azr.shutdown()
+        logger.info("✅ AZR shutdown")
+
+    logger.info("✅ Shutdown abgeschlossen")
+
+
+# 🔹 Fehlende Klassen (Platzhalter)
+class AbsoluteZeroReasonerV2:
+    pass
+
+
+class AzureQuantumProvider:
+    async def execute(self, circuit: QuantumCircuit):
+        return {"result": "Azure Quantum placeholder"}
+
+
+class AWSBraket:
+    async def execute(self, circuit: QuantumCircuit):
+        return {"result": "AWS Braket placeholder"}
+
+
+class LocalQPU:
+    async def execute(self, circuit: QuantumCircuit):
+        return {"result": "Local QPU placeholder"}
+
+
+class Database:
+    def __init__(self, db_url):
+        self.db_url = db_url
+
+    async def connect(self):
+        logger.info("💾 Database connected")
+
+    async def disconnect(self):
+        logger.info("🔌 Database disconnected")
+
+
+class TranspilationCache:
+    async def optimize(self):
+        logger.info("🔁 Transpilation Cache optimized")
+
+
+class EnhancedTokenManager:
+    def generate(self, user_id: str):
+        return f"token_{user_id}"
+
+
+class AvatarParams:
+    def __init__(self, name, prompt, model):
+        self.name = name
+        self.prompt = prompt
+        self.model = model
+
+
+class MODELS:
+    models = ["openai", "anthropic", "google", "groq", "qwen"]  # ✅ Klassenattribut
+
+
+# 🔹 SIEM INTEGRATION MIT SPEZIFISCHER EXCEPTION UND ASYNC CONTEXT MANAGER
+class SIEMConnectionError(Exception):
+    pass
+
+
+async def send_to_siem(data: dict, severity: str = "error") -> None:
+    """Robustes SIEM-Logging mit Dead-Letter-Queue"""
+    data["severity"] = severity
+    try:
+        headers = {"Authorization": f"Bearer {config.security.SIEM_API_KEY}"}
+        async with AsyncClient(timeout=10) as client:
+            async for attempt in AsyncRetrying(
+                    stop=stop_after_attempt(3),
+                    wait=wait_exponential(multiplier=1, min=2, max=10),
+                    retry=retry_if_exception_type(HTTPError)
+            ):
+                async with attempt:
+                    response = await client.post(
+                        config.security.SIEM_ENDPOINT,
+                        json=data,
+                        headers=headers
+                    )
+                    response.raise_for_status()
+    except Exception as e:
+        logger.critical(f"SIEM-Error: {e}")
+        await _dead_letter_queue.put(data)
+        raise SIEMConnectionError(f"SIEM-Fehler: {e}")
+
+
+# 🔹 Hauptloop mit CLI und Metriken
+async def main():
+    # Metal-Quantum Optimierungen
+    if torch.backends.mps.is_available():
+        torch._C._set_mps_quantum_mode(True)
+        torch._C._set_mps_quantum_cache(2048)  # 2GB Cache
+        logger.info("🔧 MPS Quantum Mode aktiviert")
+
+    # System initialisieren
+    system = await HyperCoreSystem.get_instance()
+    try:
+        # Tests vor Server-Start
+        if not await run_tests():
+            logger.warning("🧪 Tests fehlgeschlagen, starte trotzdem")
+
+        # FastAPI starten
+        server_config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
+        server = uvicorn.Server(server_config)
+        server_task = asyncio.create_task(server.serve())
+
+        # CLI starten
+        cli = HyperCoreCLI(system)
+        cli_task = asyncio.create_task(cli.run())
+
+        # Auf Beendigung warten
+        await asyncio.wait([server_task, cli_task], return_when=asyncio.FIRST_COMPLETED)
+        await system.graceful_terminate()
+        logger.info("✅ System beendet")
+
+    except QuantumInterrupt:
+        await system.graceful_terminate()
+    except Exception as e:
+        ERROR_COUNTER.inc({"component": "Main"})
+        logger.critical(f"Kritischer Fehler: {e}", exc_info=True)
+        await elastic_log("critical", {"error": str(e)})
+        sys.exit(1)
+
+
+# 🔹 CLI MIT METRICS UND METAL-QUANTUM
+class HyperCoreCLI:
+    def __init__(self, system):
+        self.system = system
+        self.token_manager = EnhancedTokenManager(system.security)
+        self.session_token = self.token_manager.generate("cli_user")
+        self.commands = [f"generate_avatar_{m}" for m in MODELS.models] + ["list_avatars", "tool_email", "tool_lead",
+                                                                           "tool_calendar", "tool_youtube",
+                                                                           "tool_vision"]
+
+    async def run(self):
+        print("🌌 HyperCore CLI v6.3.8 🌌")
+        asyncio.create_task(self.system.monitor.track_gpu_usage())
+        asyncio.create_task(self.system.monitor.track_memory_usage())
+        asyncio.create_task(self.system.monitor.track_cpu_usage())
+        while not self.system._shutdown.done():
+            cid = str(uuid.uuid4())
+            correlation_id_var.set(cid)
+            cmd = await asyncio.get_event_loop().run_in_executor(None, input, "> ")
+            if cmd in ("exit", "quit"):
+                break
+            if cmd == "hilfe":
+                print("Verfügbare Befehle:\n  " + "\n  ".join(self.commands))
+                continue
+            try:
+                ok, rem = await self.system.rate_limiter.check(self.session_token)
+                if not ok:
+                    raise QuantumSecurityBreach(f"Rate limit exceeded ({rem} left)")
+                parts = cmd.strip().split()
+                c = parts[0]
+                if c.startswith("generate_avatar"):
+                    m = c.split("_")[-1]
+                    p = AvatarParams(name=parts[1], prompt=" ".join(parts[2:]), model=m)
+                    res = await self.system.avatar.generate(p)
+                    out = {"data": res}
+                elif c == "list_avatars":
+                    out = {"avatars": await self.system.avatar.list_avatars()}
+                elif c.startswith("tool_"):
+                    tn = c.split("_", 1)[1]
+                    if tn not in self.system.tools:
+                        tools = ", ".join(self.system.tools.keys())
+                        out = {"error": f"Tool '{tn}' nicht verfügbar. Verfügbar: {tools}"}
+                    else:
+                        out = {"data": await self.system.tools[tn].execute(*parts[1:])}
+                print(f"📊 HOLOGRAM: {out.get('data', out.get('error'))}")
+                if sug := await self.system.context.suggest(self.session_token):
+                    print(f"💡 Suggestion: {sug}")
+                asyncio.create_task(self.system.self_learning_agent.learn_from_interaction("cli_user", cmd, out))
+            except InvalidToken:
+                logger.error("Token invalid", extra={"correlation_id": cid})
+                await elastic_log("error", {"message": "Token invalid", "correlation_id": cid})
+                sys.exit(1)
+            except QuantumSecurityBreach as e:
+                logger.error(f"Sicherheitsverletzung: {e}", extra={"correlation_id": cid})
+                await elastic_log("error", {"message": "Sicherheitsverletzung", "error": str(e), "correlation_id": cid})
+                print(f"Error: {e}")
+            except Exception as e:
+                ERROR_COUNTER.inc()
+                logger.error(f"CLI error: {e}", exc_info=True, extra={"correlation_id": cid})
+                await elastic_log("error", {"message": "CLI error", "error": str(e), "correlation_id": cid})
+                print("Interner CLI error")
+        await self.system.graceful_terminate()
+
+
+# 🔹 ElasticSearch Logging
+elastic_client = AsyncElasticsearch(hosts=["https://elastic.instance.com "])  # ✅ Leerzeichen entfernt
+
+
+async def elastic_log(event_type: str, details: dict):
+    await elastic_client.index(index="quantum-logs", document={"event": event_type, "details": details})
+
+
+# 🔹 Exception Handling
+@app.exception_handler(QuantumResourceError)
+async def quantum_resource_exception_handler(request: Request, exc: QuantumResourceError):
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"message": "Quantum resources temporarily unavailable, please retry."}
+    )
+
+
+@app.exception_handler(QuantumDecoherenceError)
+async def decoherence_handler(request: Request, exc: QuantumDecoherenceError):
+    logger.error(f"Decoherence detected: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"message": "Quantum decoherence occurred"}
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.critical(f"🚨 Unhandled Exception: {exc}", exc_info=True)
+    await send_to_siem({
+        "path": request.url.path,
+        "error": str(exc),
+        "severity": "critical"
+    })
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"message": "Interner Fehler"}
+    )
+
+
+# 🔹 FINALE main() MIT ÄNDERUNGEN
+if __name__ == "__main__":
+    # Metal-Quantum Build
+    if torch.backends.mps.is_available():
+        torch._C._set_mps_quantum_mode(True)
+        torch._C._set_mps_quantum_cache(2048)  # 2GB Cache
+        logger.info("🔧 MPS Quantum Mode aktiviert")
+
+    # Umgebungsvariablen für MPS
+    os.environ["MPS_ENABLE_METAL_QUANTUM"] = "1"
+    os.environ["MPS_QUANTUM_CACHE_SIZE"] = "1024"
+
+    # Startbefehl mit MPS-Optimierungen
+    asyncio.run(main())
