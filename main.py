@@ -35,6 +35,7 @@ import qiskit
 from qiskit import transpile, QuantumCircuit
 from qiskit_ibm_runtime import QiskitRuntimeService, Session, Sampler
 from qiskit import QuantumCircuit
+from contextlib import asynccontextmanager  # 🔧 Für async Lifespan erforderlich
 from fastapi import FastAPI, Depends, Request, HTTPException, status, APIRouter, Query
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +51,7 @@ from elasticsearch import AsyncElasticsearch
 from redis.asyncio import Redis as AsyncRedis
 from starlette.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from src.modules.config.config import config
 from src.modules.quantum.rng import quantum_random
 from src.modules.exceptions.quantum_exceptions import (
     QuantumSecurityBreach,
@@ -105,20 +107,21 @@ class InvalidToken(Exception):  # ✅ Ergänzte Exception
     """Wird ausgelöst bei ungültigen Tokens."""
     pass
 
-
-# 🔹 KORRIGIERTE SECURITY-CONFIG OHNE TRAILING SPACES
-class SecurityConfig(BaseModel):
-    VAULT_URL: HttpUrl = Field("https://vault.quantumcore.tech ", env="SECURITY__VAULT_URL")
-    SIEM_ENDPOINT: HttpUrl = Field("https://siem.enterprise.com/log ", env="SECURITY__SIEM_ENDPOINT")
-    SIEM_API_KEY: str = Field(..., env="SECURITY__SIEM_API_KEY")  # 🔧 Prefix mit "__" anpassen
-    SGX_API_KEY: str = Field(..., env="SECURITY__SGX_API_KEY")  # 🔧 Prefix mit "__" anpassen
+class SecurityConfig(BaseModel):   # <--- Zeile 109
+    VAULT_URL: HttpUrl = Field("https://vault.quantumcore.tech", env="SECURITY__VAULT_URL")
+    SIEM_ENDPOINT: HttpUrl = Field("https://siem.enterprise.com/log", env="SECURITY__SIEM_ENDPOINT")
+    SIEM_API_KEY: str = Field(..., env="SECURITY__SIEM_API_KEY")
+    SGX_API_KEY: str = Field(..., env="SECURITY__SGX_API_KEY")
     SGX_ENABLED: bool = Field(True, env="SECURITY__SGX_ENABLED")
 
-
 class LiveConfig(BaseSettings):
+    class Config:
+        env_nested_delimiter = "__"
+        env_parse_json = True  # ✅ JSON automatisch parsen
+
     REDIS_URL: RedisDsn = Field(..., env="REDIS_URL")
     DB_URL: str = Field(..., env="DB_URL")
-    QISKIT_VERSION: str = Field("1.0.2", env="QISKIT_VERSION")  # ✅ Kompatibilität mit IBM Runtime 0.22.0
+    QISKIT_VERSION: str = Field("1.0.2", env="QISKIT_VERSION")
     MAX_CIRCUIT_DEPTH: int = Field(100, env="MAX_CIRCUIT_DEPTH")
     FORBIDDEN_GATES: List[str] = Field(default_factory=lambda: ["ccx", "swap", "u3"], env="FORBIDDEN_GATES")
     QEC_LEVEL: str = Field("topological", env="QEC_LEVEL")
@@ -143,24 +146,31 @@ class LiveConfig(BaseSettings):
     IBM_QUANTUM_API_KEY: str = Field(..., env="IBM_QUANTUM_API_KEY")
     IBM_QUANTUM_INSTANCE: str = Field(..., env="IBM_QUANTUM_INSTANCE")
     MAX_SHOTS: int = Field(100, env="MAX_SHOTS")  # Kostenkontrolle
+config = LiveConfig()
+from src.modules.utils.configure_logging import configure_logging
+logger = configure_logging(config.ENVIRONMENT)
 
 
-class LiveConfig(BaseSettings):
-    class Config:
-        env_nested_delimiter = "__"
-        env_parse_json = True  # ✅ JSON automatisch parsen
+# 🔹 LIFESPAN-FUNKTION VOR DER APP-INITIALISIERUNG PLATZIEREN
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lebenszyklus-Manager für Initialisierung und Bereinigung"""
+    logger.info("🚀 HyperCore System gestartet")
+    system = HyperCoreSystem()
+    await system.bootstrap()
+    if config.security.SGX_ENABLED:
+        await system.security.activate()
+    yield
+    logger.info("🛑 HyperCore System heruntergefahren")
+    await system.graceful_terminate()
 
-    security: SecurityConfig = Field(default_factory=SecurityConfig)
-    redis_url: RedisDsn = Field("redis://localhost:6379", env="REDIS_URL")
-    db_url: str = Field("sqlite:///hypercore.db", env="DB_URL")
-    qiskit_version: str = Field("1.0.2", env="QISKIT_VERSION")
-    max_circuit_depth: int = Field(100, env="MAX_CIRCUIT_DEPTH")
-    forbidden_gates: List[str] = Field(default_factory=lambda: ["ccx", "swap", "u3"], env="FORBIDDEN_GATES")
-    quantum_shards: int = Field(2048, env="QUANTUM_SHARDS")
-    qec_level: str = Field("topological", env="QEC_LEVEL")
-    quantum_cores: int = Field(1024, env="QUANTUM_CORES")
-    sgx_enabled: bool = Field(True, env="SGX_ENABLED")
-    hsm_nodes: List[str] = Field(default_factory=list, env="HSM_NODES")
+# 🚀 APP INITIALIZATION MIT MODULARER ROUTER-REGISTRY
+app = FastAPI(
+    title="HyperCore Quantum API",
+    version="6.3.8",
+    description="TRL-9 Production-Ready Plattform",
+    lifespan=lifespan  # ✅ Jetzt korrekt definiert
+)
 
 # 🛡️ METRICS & OBSERVABILITY MIT ENDPUNKT-SPEZIFISCHEN METRIKEN
 SHARD_LATENCY = Histogram('shard_latency_seconds', 'Shard execution latency', ['shard_id'])
@@ -179,10 +189,10 @@ QUANTUM_COST_MONITOR = Gauge("quantum_execution_cost", "Estimated execution cost
 
 # 🚀 APP INITIALIZATION MIT MODULARER ROUTER-REGISTRY
 app = FastAPI(
-    title="HyperCore Quantum Platform",
+    title="HyperCore Quantum API",
     version="6.3.8",
     description="TRL-9 Production-Ready Plattform",
-    lifespan=lifespan  # ✅ Lebenszyklus-Manager einbinden
+    lifespan=lifespan  # 🔧 Jetzt korrekt referenziert
 )
 
 # 🌐 MODULARER ROUTER
@@ -225,16 +235,6 @@ app_state = AppState()
 
 # 🔹 GLOBAL SYSTEM MANAGER INITIALISIERUNG
 system_manager = SystemManager(config)
-
-
-# 🔹 LIFESPAN-FUNKTION MIT ASYNC-CONTEXTMANAGER
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("🚀 HyperCore System gestartet")
-    await startup()
-    yield
-    logger.info("🛑 HyperCore System heruntergefahren")
-    await shutdown()
 
 
 # 🔹 BACKGROUND TASKS MIT PRIORITY QUEUE UND LOGGING
